@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nuclear Standoff — Game Theory</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%98%A2%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --ink-0: oklch(0.10 0.015 255);
+      --ink-1: oklch(0.14 0.018 255);
+      --ink-2: oklch(0.19 0.02 255);
+      --ink-3: oklch(0.26 0.02 255);
+      --ink-4: oklch(0.36 0.02 255);
+      --bone: oklch(0.95 0.012 80);
+      --bone-dim: oklch(0.78 0.012 80);
+      --bone-low: oklch(0.55 0.012 80);
+      --ember: oklch(0.64 0.22 28);
+      --ember-deep: oklch(0.45 0.18 28);
+      --ember-bright: oklch(0.74 0.20 35);
+      --gold: oklch(0.78 0.14 85);
+      --gold-deep: oklch(0.55 0.13 80);
+      --leaf: oklch(0.72 0.16 145);
+      --leaf-deep: oklch(0.45 0.12 145);
+      --steel: oklch(0.62 0.05 240);
+    }
+    html, body {
+      font-family: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+      font-feature-settings: "ss01", "cv11";
+      letter-spacing: -0.01em;
+    }
+    body {
+      background: var(--ink-0);
+      color: var(--bone);
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Ambient atmospheric backdrop -- a cold, hostile sky over silhouetted skyline */
+    .world-backdrop {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    }
+    .world-backdrop::before {
+      content: ""; position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 120% 60% at 50% 110%, oklch(0.22 0.08 25 / 0.35), transparent 60%),
+        radial-gradient(ellipse 80% 50% at 80% 20%, oklch(0.35 0.10 50 / 0.18), transparent 65%),
+        radial-gradient(ellipse 70% 50% at 15% 30%, oklch(0.20 0.08 250 / 0.30), transparent 65%),
+        linear-gradient(to bottom, var(--ink-1) 0%, var(--ink-0) 50%, oklch(0.06 0.01 255) 100%);
+    }
+    /* film grain */
+    .world-backdrop::after {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      opacity: 0.07; mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    }
+
+    #root { position: relative; z-index: 2; }
+
+    /* —— TYPE TREATMENTS —— */
+    .serif { font-family: "Instrument Serif", "Times New Roman", serif; letter-spacing: -0.005em; }
+    .mono  { font-family: "JetBrains Mono", ui-monospace, monospace; font-feature-settings: "tnum", "ss01"; }
+    .num   { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+    .micro { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600; }
+    .label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; color: var(--bone-low); }
+
+    /* —— PANELS —— */
+    .panel {
+      background: linear-gradient(180deg, oklch(0.16 0.018 255 / 0.92), oklch(0.13 0.018 255 / 0.92));
+      border: 1px solid oklch(1 0 0 / 0.06);
+      border-radius: 14px;
+      box-shadow: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 30px 60px -30px oklch(0 0 0 / 0.6);
+      backdrop-filter: blur(8px);
+    }
+    .panel-flat {
+      background: oklch(0.12 0.018 255 / 0.85);
+      border: 1px solid oklch(1 0 0 / 0.05);
+      border-radius: 10px;
+    }
+
+    /* —— ANIMATIONS —— */
+    .fade-in { animation: fade .35s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .stagger > * { animation: fade .5s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+    .stagger > *:nth-child(1) { animation-delay: .02s; }
+    .stagger > *:nth-child(2) { animation-delay: .08s; }
+    .stagger > *:nth-child(3) { animation-delay: .14s; }
+    .stagger > *:nth-child(4) { animation-delay: .20s; }
+    .stagger > *:nth-child(5) { animation-delay: .26s; }
+    .stagger > *:nth-child(6) { animation-delay: .32s; }
+
+    .shake { animation: shake 0.7s cubic-bezier(.36,.07,.19,.97) both; }
+    @keyframes shake {
+      10%, 90% { transform: translate3d(-2px, 1px, 0); }
+      20%, 80% { transform: translate3d(4px, -2px, 0) rotate(-0.2deg); }
+      30%, 50%, 70% { transform: translate3d(-7px, 2px, 0) rotate(0.3deg); }
+      40%, 60% { transform: translate3d(6px, -3px, 0) rotate(-0.3deg); }
+    }
+    .shake-soft { animation: shakeSoft 0.4s ease-out both; }
+    @keyframes shakeSoft {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-3px); }
+      75% { transform: translateX(3px); }
+    }
+
+    /* Strike flash overlay */
+    .strike-flash {
+      position: fixed; inset: 0; pointer-events: none; z-index: 50;
+      background: radial-gradient(ellipse at center, oklch(0.95 0.20 30 / 0.85), oklch(0.50 0.25 25 / 0.4) 40%, transparent 70%);
+      animation: strikeFlash 0.85s ease-out both;
+    }
+    @keyframes strikeFlash {
+      0%   { opacity: 0; }
+      8%   { opacity: 1; }
+      40%  { opacity: 0.5; }
+      100% { opacity: 0; }
+    }
+
+    /* Nuclear flash overlay (mutual annihilation) */
+    .nuke-flash {
+      position: fixed; inset: 0; pointer-events: none; z-index: 50;
+      background: radial-gradient(ellipse at center, oklch(1 0 0 / 1), oklch(1 0.05 90 / 0.9) 30%, oklch(0.50 0.20 40 / 0.5) 60%, transparent 90%);
+      animation: nukeFlash 1.4s cubic-bezier(0.2,0.8,0.2,1) both;
+    }
+    @keyframes nukeFlash {
+      0%   { opacity: 0; transform: scale(0.4); }
+      10%  { opacity: 1; transform: scale(1); }
+      40%  { opacity: 0.95; }
+      100% { opacity: 0; transform: scale(2.2); }
+    }
+
+    /* Trade bloom overlay (cooperation) */
+    .trade-bloom {
+      position: fixed; inset: 0; pointer-events: none; z-index: 50;
+      background: radial-gradient(ellipse at center, oklch(0.85 0.14 85 / 0.50), oklch(0.65 0.13 75 / 0.20) 45%, transparent 70%);
+      animation: tradeBloom 1.1s cubic-bezier(0.2,0.7,0.1,1) both;
+    }
+    @keyframes tradeBloom {
+      0%   { opacity: 0; transform: scale(0.6); }
+      30%  { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.4); }
+    }
+
+    /* Pulse glow on outcome icon */
+    .impact { animation: impact 0.7s cubic-bezier(0.2, 0.8, 0.1, 1) both; }
+    @keyframes impact {
+      0%   { transform: scale(0.3); opacity: 0; filter: blur(8px); }
+      40%  { transform: scale(1.3); opacity: 1; filter: blur(0); }
+      70%  { transform: scale(0.95); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .ember { animation: ember 1.6s ease-in-out infinite; }
+    @keyframes ember {
+      0%, 100% { opacity: 0.7; }
+      50%      { opacity: 1; }
+    }
+
+    .ascend { animation: ascend 1.8s ease-out forwards; }
+    @keyframes ascend {
+      0%   { transform: translateY(40px); opacity: 0; }
+      30%  { opacity: 1; }
+      100% { transform: translateY(-120px); opacity: 0; }
+    }
+
+    .grow { animation: grow 1.0s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+    @keyframes grow {
+      0%   { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
+      100% { transform: scaleY(1); transform-origin: bottom; opacity: 1; }
+    }
+
+    /* Trade route line draw */
+    .draw-line { stroke-dasharray: 600; stroke-dashoffset: 600; animation: dash 1.0s cubic-bezier(0.2, 0.7, 0.1, 1) forwards; }
+    @keyframes dash { to { stroke-dashoffset: 0; } }
+
+    /* Crack overlay for strike scene */
+    .crack { stroke-dasharray: 400; stroke-dashoffset: 400; animation: dash 0.45s cubic-bezier(0.5, 0, 0.5, 1) forwards; }
+
+    /* Smoke rise */
+    .smoke {
+      animation: smoke 2.4s ease-out infinite;
+      transform-origin: center bottom;
+    }
+    @keyframes smoke {
+      0%   { transform: translateY(0) scale(0.6); opacity: 0; }
+      30%  { opacity: 0.8; }
+      100% { transform: translateY(-110px) scale(1.6); opacity: 0; }
+    }
+
+    /* Reputation ring spinner */
+    .rep-ring { animation: spin 18s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Cursor: hover lift */
+    .lift { transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, border-color .18s ease; }
+    .lift:hover { transform: translateY(-1px); }
+
+    /* Big move buttons */
+    .btn-trade {
+      background:
+        radial-gradient(ellipse at top, oklch(0.78 0.14 85 / 0.25), transparent 60%),
+        linear-gradient(180deg, oklch(0.30 0.06 85 / 0.7), oklch(0.18 0.04 85 / 0.85));
+      border: 1px solid oklch(0.78 0.14 85 / 0.40);
+      box-shadow:
+        inset 0 1px 0 oklch(1 0.05 90 / 0.20),
+        0 0 0 1px oklch(0.78 0.14 85 / 0.10),
+        0 18px 40px -16px oklch(0.50 0.13 80 / 0.5);
+    }
+    .btn-trade:hover {
+      border-color: oklch(0.78 0.14 85 / 0.65);
+      box-shadow:
+        inset 0 1px 0 oklch(1 0.05 90 / 0.30),
+        0 0 0 1px oklch(0.78 0.14 85 / 0.20),
+        0 22px 50px -18px oklch(0.55 0.13 80 / 0.7);
+    }
+    .btn-strike {
+      background:
+        radial-gradient(ellipse at top, oklch(0.74 0.20 30 / 0.30), transparent 60%),
+        linear-gradient(180deg, oklch(0.32 0.16 28 / 0.8), oklch(0.18 0.10 28 / 0.92));
+      border: 1px solid oklch(0.64 0.22 28 / 0.45);
+      box-shadow:
+        inset 0 1px 0 oklch(1 0.10 30 / 0.25),
+        0 0 0 1px oklch(0.64 0.22 28 / 0.10),
+        0 18px 40px -16px oklch(0.45 0.18 28 / 0.5);
+    }
+    .btn-strike:hover {
+      border-color: oklch(0.64 0.22 28 / 0.75);
+      box-shadow:
+        inset 0 1px 0 oklch(1 0.10 30 / 0.35),
+        0 0 0 1px oklch(0.64 0.22 28 / 0.30),
+        0 22px 50px -18px oklch(0.50 0.20 28 / 0.7);
+    }
+    .btn-primary {
+      background: linear-gradient(180deg, var(--bone), oklch(0.85 0.012 80));
+      color: var(--ink-0);
+      border: 1px solid oklch(0.65 0.012 80);
+      box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.5), 0 12px 24px -10px oklch(0 0 0 / 0.5);
+    }
+    .btn-primary:hover { filter: brightness(1.04); }
+
+    /* Glyph tokens */
+    .nation-token {
+      width: 36px; height: 36px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+      font-weight: 700; font-size: 12px;
+      letter-spacing: 0.04em;
+      color: var(--bone);
+      position: relative;
+      flex: none;
+    }
+    .nation-token.sm { width: 22px; height: 22px; font-size: 9px; border-radius: 5px; }
+    .nation-token.lg { width: 56px; height: 56px; font-size: 17px; border-radius: 12px; }
+    .nation-token::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      background: linear-gradient(160deg, oklch(1 0 0 / 0.20), oklch(1 0 0 / 0) 60%);
+      pointer-events: none;
+    }
+
+    /* The reputation status — animated ring */
+    .rep-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid currentColor;
+      background: color-mix(in oklch, currentColor 8%, transparent);
+    }
+    .rep-pill.lg { font-size: 12px; padding: 5px 12px 5px 10px; }
+    .rep-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+
+    /* Move chip in history */
+    .move-chip {
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      position: relative;
+    }
+    .move-chip.coop { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); }
+    .move-chip.atk  { background: linear-gradient(180deg, var(--ember-bright), var(--ember-deep)); }
+    .move-chip.empty { background: oklch(0.20 0.018 255); border: 1px dashed oklch(0.30 0.018 255); }
+
+    /* Selection rings */
+    .select-ring {
+      box-shadow: 0 0 0 1px oklch(0.78 0.14 85 / 0.7), 0 0 0 4px oklch(0.78 0.14 85 / 0.15), 0 12px 30px -12px oklch(0.55 0.13 80 / 0.4);
+    }
+
+    /* Scoreboard chips */
+    .score-bar {
+      height: 6px;
+      border-radius: 999px;
+      background: oklch(0.20 0.018 255);
+      overflow: hidden;
+    }
+    .score-fill-me   { background: linear-gradient(90deg, var(--gold), var(--gold-deep)); }
+    .score-fill-them { background: linear-gradient(90deg, var(--ember-bright), var(--ember-deep)); }
+
+    /* Vertical accent bar */
+    .accent-bar {
+      width: 3px; align-self: stretch; border-radius: 999px;
+      background: linear-gradient(180deg, currentColor, transparent);
+      opacity: 0.7;
+    }
+
+    /* Distortion bg for strike result */
+    .scene-strike {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.55 0.22 25 / 0.45), transparent 55%),
+        radial-gradient(ellipse 60% 80% at 50% 100%, oklch(0.20 0.10 20 / 0.7), transparent 55%),
+        linear-gradient(180deg, oklch(0.18 0.10 25 / 0.85), oklch(0.10 0.05 20 / 0.95));
+    }
+    .scene-coop {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.78 0.14 85 / 0.30), transparent 55%),
+        radial-gradient(ellipse 60% 80% at 50% 100%, oklch(0.40 0.10 75 / 0.4), transparent 55%),
+        linear-gradient(180deg, oklch(0.22 0.06 85 / 0.65), oklch(0.13 0.03 80 / 0.92));
+    }
+    .scene-betrayed {
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.45 0.20 25 / 0.50), transparent 55%),
+        radial-gradient(ellipse 60% 80% at 50% 100%, oklch(0.18 0.10 20 / 0.7), transparent 55%),
+        linear-gradient(180deg, oklch(0.16 0.10 25 / 0.85), oklch(0.10 0.05 20 / 0.95));
+    }
+    .scene-nuke {
+      background:
+        radial-gradient(ellipse 100% 100% at 50% 50%, oklch(0.55 0.22 35 / 0.55), transparent 60%),
+        radial-gradient(ellipse 80% 60% at 50% 100%, oklch(0.18 0.05 30 / 0.85), transparent 55%),
+        linear-gradient(180deg, oklch(0.22 0.10 30 / 0.92), oklch(0.06 0.02 30 / 1));
+    }
+
+    /* Choice indicator */
+    .choice {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      background: color-mix(in oklch, currentColor 10%, transparent);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+    .choice .glyph {
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      background: currentColor;
+    }
+
+    /* Casualty / prosperity tickers (rising numbers) */
+    .ticker {
+      position: absolute;
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 700;
+      font-size: 13px;
+      pointer-events: none;
+      animation: ascend 1.8s ease-out forwards;
+    }
+
+    /* Bar grow on prosperity */
+    .grow-bar { animation: growBar 1.1s cubic-bezier(0.2, 0.8, 0.1, 1) forwards; transform-origin: bottom; }
+    @keyframes growBar { from { transform: scaleY(0.05); } to { transform: scaleY(1); } }
+
+    /* Fracture: full-card crack svg */
+    .fracture { mix-blend-mode: screen; opacity: 0.85; }
+
+    /* Subtle hover for nation cards */
+    .nation-card:hover { border-color: oklch(1 0 0 / 0.18); }
+
+    /* Custom scrollbar in panels */
+    .panel ::-webkit-scrollbar { width: 6px; height: 6px; }
+    .panel ::-webkit-scrollbar-thumb { background: oklch(0.30 0.018 255); border-radius: 3px; }
+
+    /* Footer caption */
+    .caption { color: var(--bone-low); font-size: 12px; letter-spacing: 0.02em; }
+
+    /* Mobile-tuned scaling for oversize serif headings */
+    @media (max-width: 640px) {
+      .serif-hero { font-size: clamp(2.5rem, 12vw, 4.5rem) !important; line-height: 0.95 !important; }
+      .serif-xl   { font-size: clamp(1.8rem, 8vw, 3rem) !important; line-height: 1 !important; }
+      .serif-lg   { font-size: clamp(1.4rem, 6vw, 2.25rem) !important; line-height: 1.05 !important; }
+      .nation-token.lg { width: 44px; height: 44px; font-size: 14px; border-radius: 10px; }
+      .panel-mobile-tight { padding: 1.1rem !important; border-radius: 12px; }
+      .label, .micro { font-size: 9px; letter-spacing: 0.14em; }
+      .ticker { font-size: 11px; }
+    }
+    @media (max-width: 380px) {
+      .nation-token { width: 30px; height: 30px; font-size: 10px; }
+      .nation-token.sm { width: 20px; height: 20px; font-size: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="world-backdrop"></div>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useReducer, useEffect, useState, useRef, useMemo } = React;
+
+    // ============================================================
+    // CONSTANTS — game logic untouched
+    // ============================================================
+    const BOT_DEFINITIONS = [
+      { id: 1, realName: "Suspicious Tit for Tat", strategy: "suspicioustft", desc: "Attacks first, then copies your last move." },
+      { id: 2, realName: "Tit for Tat",            strategy: "titfortat",     desc: "Copies your last move. Cooperates first." },
+      { id: 3, realName: "Prober",                 strategy: "prober",        desc: "Defects R1, cooperates R2-3 to test, then exploits if you forgave or plays Tit for Tat if you struck back." },
+      { id: 4, realName: "Hawk",                   strategy: "hawk",          desc: "Always attacks." },
+      { id: 5, realName: "Random",                 strategy: "random",        desc: "50/50 every round." },
+      { id: 6, realName: "Grudger",                strategy: "grudger",       desc: "Cooperates until attacked once, then attacks forever." },
+      { id: 7, realName: "Pavlov",                 strategy: "pavlov",        desc: "Win-stay, lose-shift." },
+      { id: 8, realName: "Generous Tit for Tat",   strategy: "generoustft",   desc: "Tit for Tat, but forgives 10% of attacks." },
+    ];
+
+    const COUNTRIES = [
+      { name: "United States",  code: "US", color: "oklch(0.55 0.18 250)" },
+      { name: "Russia",         code: "RU", color: "oklch(0.58 0.20 25)" },
+      { name: "China",          code: "CN", color: "oklch(0.70 0.17 70)" },
+      { name: "India",          code: "IN", color: "oklch(0.68 0.18 50)" },
+      { name: "Pakistan",       code: "PK", color: "oklch(0.55 0.15 150)" },
+      { name: "United Kingdom", code: "UK", color: "oklch(0.55 0.18 290)" },
+      { name: "France",         code: "FR", color: "oklch(0.58 0.16 270)" },
+      { name: "North Korea",    code: "KP", color: "oklch(0.50 0.20 20)" },
+      { name: "Israel",         code: "IL", color: "oklch(0.65 0.13 220)" },
+    ];
+
+    const ROUNDS_PER_MATCHUP = 5;
+    const EXECUTION_NOISE    = 0.10;
+
+    // ============================================================
+    // CORE LOGIC — verbatim from original
+    // ============================================================
+    function score(m1, m2) {
+      if (m1 === "cooperate" && m2 === "cooperate") return [3, 3];
+      if (m1 === "attack"    && m2 === "cooperate") return [5, 0];
+      if (m1 === "cooperate" && m2 === "attack")    return [0, 5];
+      return [1, 1];
+    }
+    function botDecide(strategy, myHistory, oppHistory) {
+      const intended = botDecideClean(strategy, myHistory, oppHistory);
+      if (Math.random() < EXECUTION_NOISE) return intended === "cooperate" ? "attack" : "cooperate";
+      return intended;
+    }
+    function botDecideClean(strategy, myHistory, oppHistory) {
+      switch (strategy) {
+        case "hawk":   return "attack";
+        case "random": return Math.random() > 0.5 ? "cooperate" : "attack";
+        case "titfortat":
+          if (oppHistory.length === 0) return "cooperate";
+          return oppHistory[oppHistory.length - 1];
+        case "suspicioustft":
+          if (oppHistory.length === 0) return "attack";
+          return oppHistory[oppHistory.length - 1];
+        case "prober": {
+          if (oppHistory.length === 0) return "attack";
+          if (oppHistory.length === 1) return "cooperate";
+          if (oppHistory.length === 2) return "cooperate";
+          const sucker = oppHistory[1] === "cooperate" && oppHistory[2] === "cooperate";
+          if (sucker) return "attack";
+          return oppHistory[oppHistory.length - 1];
+        }
+        case "grudger": return oppHistory.includes("attack") ? "attack" : "cooperate";
+        case "pavlov": {
+          if (myHistory.length === 0) return "cooperate";
+          const i = myHistory.length - 1;
+          const [myLastScore] = score(myHistory[i], oppHistory[i]);
+          const last = myHistory[i];
+          if (myLastScore === 3 || myLastScore === 5) return last;
+          return last === "cooperate" ? "attack" : "cooperate";
+        }
+        case "generoustft":
+          if (oppHistory.length === 0) return "cooperate";
+          if (oppHistory[oppHistory.length - 1] === "attack") return Math.random() < 0.1 ? "cooperate" : "attack";
+          return "cooperate";
+        default: return "cooperate";
+      }
+    }
+    function generateMatchups() {
+      const ids = ["player", 1, 2, 3, 4, 5, 6, 7, 8];
+      const matchups = [];
+      for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++)
+          matchups.push({ p1: ids[i], p2: ids[j], rounds: [], currentRound: 0, complete: false });
+      return matchups;
+    }
+    function shuffled(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+      return a;
+    }
+    function buildBotRoster(playerCountryCode) {
+      const remaining = shuffled(COUNTRIES.filter(c => c.code !== playerCountryCode));
+      const order = shuffled(BOT_DEFINITIONS);
+      return order.map((b, i) => ({
+        id: b.id, realName: b.realName, strategy: b.strategy, desc: b.desc,
+        codename: remaining[i].name, countryCode: remaining[i].code, countryColor: remaining[i].color,
+      }));
+    }
+    function botEntry(state, id) { return state.bots.find(b => b.id === id); }
+    function pickNextMatchupIdx(allMatchups, excludeIdx = null) {
+      const incomplete = allMatchups.map((m, i) => ((m.p1 === "player" || m.p2 === "player") && !m.complete) ? i : -1).filter(i => i !== -1);
+      if (incomplete.length === 0) return null;
+      const filtered = incomplete.filter(i => i !== excludeIdx);
+      const pool = filtered.length > 0 ? filtered : incomplete;
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    function botStrategyById(id) { return BOT_DEFINITIONS.find(b => b.id === id).strategy; }
+    function buildLeaderboard(allMatchups, player, bots) {
+      const totals = { player: 0 };
+      bots.forEach(b => { totals[b.id] = 0; });
+      for (const m of allMatchups) for (const r of m.rounds) { totals[m.p1] += r.p1score; totals[m.p2] += r.p2score; }
+      const rows = [
+        { id: "player", name: player.country, label: `${player.name} · ${player.country}`, score: totals.player, isPlayer: true, code: player.countryCode, color: player.countryColor },
+        ...bots.map(b => ({ id: b.id, name: b.codename, label: b.codename, score: totals[b.id], isPlayer: false, code: b.countryCode, color: b.countryColor })),
+      ];
+      rows.sort((a, b) => b.score - a.score || (a.isPlayer ? -1 : b.isPlayer ? 1 : 0));
+      return rows;
+    }
+    function advanceMatchup(m, externalMove, turn) {
+      const isPlayerMatchup = m.p1 === "player" || m.p2 === "player";
+      let move1, move2;
+      if (isPlayerMatchup) {
+        const playerIsP1 = m.p1 === "player";
+        const botId = playerIsP1 ? m.p2 : m.p1;
+        const strategy = botStrategyById(botId);
+        const playerHist = m.rounds.map(r => playerIsP1 ? r.p1move : r.p2move);
+        const botHist    = m.rounds.map(r => playerIsP1 ? r.p2move : r.p1move);
+        const botMove = botDecide(strategy, botHist, playerHist);
+        if (playerIsP1) { move1 = externalMove; move2 = botMove; } else { move1 = botMove; move2 = externalMove; }
+      } else {
+        const s1 = botStrategyById(m.p1); const s2 = botStrategyById(m.p2);
+        const h1 = m.rounds.map(r => r.p1move); const h2 = m.rounds.map(r => r.p2move);
+        move1 = botDecide(s1, h1, h2); move2 = botDecide(s2, h2, h1);
+      }
+      const [s1, s2] = score(move1, move2);
+      const rounds = [...m.rounds, { p1move: move1, p2move: move2, p1score: s1, p2score: s2, turn }];
+      return { ...m, rounds, currentRound: rounds.length, complete: rounds.length >= ROUNDS_PER_MATCHUP };
+    }
+
+    // Reputation logic
+    const REPUTATION_TAU = 8, REPUTATION_WINDOW = 15, REPUTATION_NOISE_SIGMA = 0.18, REPUTATION_MIN_OBS = 3;
+    function gaussian() {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random(); while (v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+    function computeObservedMoves(allMatchups) {
+      const obs = {};
+      for (const m of allMatchups) for (const r of m.rounds) {
+        if (m.p1 !== "player") (obs[m.p1] = obs[m.p1] || []).push({ move: r.p1move, turn: r.turn });
+        if (m.p2 !== "player") (obs[m.p2] = obs[m.p2] || []).push({ move: r.p2move, turn: r.turn });
+      }
+      return obs;
+    }
+    function computeReputations(observedMoves, currentTurn, bots) {
+      const out = {};
+      for (const b of bots) {
+        const moves = observedMoves[b.id] || [];
+        if (moves.length < REPUTATION_MIN_OBS) { out[b.id] = { bucket: "unknown", observed: moves.length }; continue; }
+        const recent = moves.slice(-REPUTATION_WINDOW);
+        let weightedCoop = 0, totalWeight = 0;
+        for (const mv of recent) {
+          const w = Math.exp(-(currentTurn - mv.turn) / REPUTATION_TAU);
+          if (mv.move === "cooperate") weightedCoop += w;
+          totalWeight += w;
+        }
+        const trueCoop = totalWeight > 0 ? weightedCoop / totalWeight : 0.5;
+        const noisy = Math.max(0, Math.min(1, trueCoop + gaussian() * REPUTATION_NOISE_SIGMA));
+        let bucket;
+        if (noisy < 0.35) bucket = "hostile";
+        else if (noisy < 0.70) bucket = "mixed";
+        else bucket = "cooperative";
+        out[b.id] = { bucket, observed: moves.length };
+      }
+      return out;
+    }
+
+    // ============================================================
+    // REDUCER — verbatim from original
+    // ============================================================
+    const initialState = { phase: "menu" };
+    function reducer(state, action) {
+      switch (action.type) {
+        case "START": {
+          const allMatchups = generateMatchups();
+          const playerMatchupIndices = allMatchups.map((m, i) => (m.p1 === "player" || m.p2 === "player") ? i : -1).filter(i => i !== -1);
+          const country = COUNTRIES.find(c => c.code === action.countryCode) || COUNTRIES[0];
+          const player = { id: "player", name: action.name, country: country.name, countryCode: country.code, countryColor: country.color };
+          const bots = buildBotRoster(country.code);
+          const firstMatchupIdx = pickNextMatchupIdx(allMatchups);
+          return {
+            phase: "playing", player, bots, allMatchups, playerMatchupIndices,
+            currentMatchupIdx: firstMatchupIdx, turn: 0,
+            reputations: computeReputations({}, 0, bots),
+            leaderboard: buildLeaderboard(allMatchups, player, bots),
+          };
+        }
+        case "PLAYER_MOVE": {
+          const currentIdx = state.currentMatchupIdx;
+          const turn = (state.turn || 0) + 1;
+          const totalPlayerRounds = state.playerMatchupIndices.length * ROUNDS_PER_MATCHUP;
+          const playerRoundsPlayedBefore = state.playerMatchupIndices.reduce((s, i) => s + state.allMatchups[i].rounds.length, 0);
+          const playerTurnsRemaining = Math.max(1, totalPlayerRounds - playerRoundsPlayedBefore);
+          let newMatchups = state.allMatchups.map((m, idx) => {
+            if (m.complete) return m;
+            const isCurrentPlayerMatchup = idx === currentIdx;
+            const isBotVBot = m.p1 !== "player" && m.p2 !== "player";
+            if (isCurrentPlayerMatchup) return advanceMatchup(m, action.move, turn);
+            if (isBotVBot) {
+              const roundsNeeded = ROUNDS_PER_MATCHUP - m.rounds.length;
+              const p = roundsNeeded / playerTurnsRemaining;
+              if (Math.random() < p) return advanceMatchup(m, undefined, turn);
+            }
+            return m;
+          });
+          const allPlayerDone = state.playerMatchupIndices.every(i => newMatchups[i].complete);
+          if (allPlayerDone) {
+            newMatchups = newMatchups.map(m => { let cur = m; while (!cur.complete) cur = advanceMatchup(cur, undefined, turn); return cur; });
+          }
+          const observedMoves = computeObservedMoves(newMatchups);
+          const reputations = computeReputations(observedMoves, turn, state.bots);
+          const leaderboard = buildLeaderboard(newMatchups, state.player, state.bots);
+          const justPlayed = newMatchups[currentIdx];
+          const lastRoundData = justPlayed.rounds[justPlayed.rounds.length - 1];
+          const playerIsP1 = justPlayed.p1 === "player";
+          const lastRound = {
+            botId: playerIsP1 ? justPlayed.p2 : justPlayed.p1,
+            roundNum: justPlayed.rounds.length,
+            playerMove:  playerIsP1 ? lastRoundData.p1move  : lastRoundData.p2move,
+            botMove:     playerIsP1 ? lastRoundData.p2move  : lastRoundData.p1move,
+            playerScore: playerIsP1 ? lastRoundData.p1score : lastRoundData.p2score,
+            botScore:    playerIsP1 ? lastRoundData.p2score : lastRoundData.p1score,
+            matchupComplete: justPlayed.complete,
+          };
+          return { ...state, allMatchups: newMatchups, leaderboard, lastRound, turn, reputations, phase: "round_result" };
+        }
+        case "CONTINUE_ROUND": {
+          if (state.lastRound && state.lastRound.matchupComplete) return { ...state, phase: "between" };
+          const nextIdx = pickNextMatchupIdx(state.allMatchups, state.currentMatchupIdx) ?? state.currentMatchupIdx;
+          return { ...state, currentMatchupIdx: nextIdx, phase: "playing" };
+        }
+        case "NEXT_MATCHUP": {
+          const nextIdx = pickNextMatchupIdx(state.allMatchups);
+          if (nextIdx === null) return { ...state, phase: "results" };
+          return { ...state, phase: "playing", currentMatchupIdx: nextIdx };
+        }
+        case "RESET": return initialState;
+        default: return state;
+      }
+    }
+
+    // ============================================================
+    // PRESENTATIONAL HELPERS
+    // ============================================================
+    const REP_STYLES = {
+      cooperative: { color: "var(--gold)",  label: "Aligned",  glyph: "◇" },
+      mixed:       { color: "var(--steel)", label: "Volatile", glyph: "◈" },
+      hostile:     { color: "var(--ember)", label: "Hostile",  glyph: "◆" },
+      unknown:     { color: "oklch(0.55 0.012 80)", label: "Unknown", glyph: "◌" },
+    };
+
+    function NationToken({ code, color, size = "md" }) {
+      const cls = size === "lg" ? "lg" : size === "sm" ? "sm" : "";
+      return (
+        <span className={`nation-token ${cls}`} style={{ background: `linear-gradient(160deg, ${color}, color-mix(in oklch, ${color} 50%, black))` }}>
+          {code}
+        </span>
+      );
+    }
+
+    function ReputationPill({ reputation, size = "md" }) {
+      const bucket = reputation?.bucket || "unknown";
+      const s = REP_STYLES[bucket];
+      return (
+        <span className={`rep-pill ${size === "lg" ? "lg" : ""}`} style={{ color: s.color }}
+              title={bucket === "unknown" ? `Insufficient data (${reputation?.observed ?? 0}/${REPUTATION_MIN_OBS})` : `Public reputation · ${reputation.observed} moves observed`}>
+          <span className="rep-dot ember"></span>
+          <span>{s.label}</span>
+        </span>
+      );
+    }
+
+    function ChoiceTag({ move }) {
+      if (move === "cooperate") return <span className="choice" style={{ color: "var(--gold)" }}><span className="glyph"></span>TRADE</span>;
+      return <span className="choice" style={{ color: "var(--ember)" }}><span className="glyph"></span>STRIKE</span>;
+    }
+
+    // ============================================================
+    // SCREEN: MENU
+    // ============================================================
+    function MenuScreen({ onStart }) {
+      const [name, setName] = useState(() => localStorage.getItem("gtt_name") || "");
+      const [countryCode, setCountryCode] = useState(() => localStorage.getItem("gtt_country") || "US");
+      const submit = () => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        localStorage.setItem("gtt_name", trimmed);
+        localStorage.setItem("gtt_country", countryCode);
+        onStart(trimmed, countryCode);
+      };
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 fade-in">
+          <div className="max-w-3xl w-full">
+            {/* Header */}
+            <div className="mb-12 stagger">
+              <div className="flex items-center gap-3 mb-6">
+                <span className="micro" style={{color:"var(--ember)"}}>◆ Classified · 2026</span>
+                <span className="h-px flex-1" style={{background: "linear-gradient(90deg, oklch(0.64 0.22 28 / 0.5), transparent)"}}></span>
+                <span className="micro" style={{color:"var(--bone-low)"}}>9 Nations · 36 Matchups</span>
+              </div>
+              <h1 className="serif serif-hero text-7xl sm:text-8xl leading-[0.92] mb-5" style={{textWrap:"balance"}}>
+                The <em style={{color: "var(--ember)"}}>Standoff</em>.
+              </h1>
+              <p className="text-xl max-w-xl" style={{color:"var(--bone-dim)", textWrap:"pretty"}}>
+                A round-robin of brinkmanship. Trade and grow rich, or strike first and steal what they had.
+                Every nation runs a hidden doctrine. Reputations are noisy. The world doesn't wait.
+              </p>
+            </div>
+
+            {/* Payoff matrix — graphical */}
+            <div className="panel p-6 mb-5 stagger">
+              <div className="flex items-baseline justify-between mb-4">
+                <div className="label">Doctrine of payoffs</div>
+                <div className="caption">Per-round outcomes for the two parties</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <PayoffCell tone="gold"  title="Mutual trade"  copy="Both prosper" me="+3" them="+3" />
+                <PayoffCell tone="ember" title="Sucker punch"   copy="They trusted, you struck" me="+5" them="0" />
+                <PayoffCell tone="ember-soft" title="Betrayed"   copy="You trusted, they struck" me="0" them="+5" />
+                <PayoffCell tone="dark"  title="Mutual ruin"   copy="Both launched" me="+1" them="+1" />
+              </div>
+            </div>
+
+            {/* Country picker */}
+            <div className="panel p-6 mb-5 stagger">
+              <div className="flex items-baseline justify-between mb-4">
+                <div className="label">Choose your nation</div>
+                <div className="caption">Names are flavor — strategies are reshuffled each game</div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {COUNTRIES.map(c => {
+                  const selected = c.code === countryCode;
+                  return (
+                    <button key={c.code} onClick={() => setCountryCode(c.code)}
+                      className={`nation-card lift flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border text-left ${selected ? "select-ring" : ""}`}
+                      style={{
+                        borderColor: selected ? "transparent" : "oklch(1 0 0 / 0.06)",
+                        background: selected ? "oklch(0.20 0.018 255 / 0.95)" : "oklch(0.14 0.018 255 / 0.7)"
+                      }}>
+                      <NationToken code={c.code} color={c.color} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] sm:text-sm font-semibold truncate">{c.name}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Name + submit */}
+            <div className="panel p-6 stagger">
+              <label className="label block mb-3">Head of state</label>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input type="text" value={name} onChange={e => setName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") submit(); }} maxLength={24}
+                  placeholder="Your name"
+                  autoFocus
+                  className="flex-1 min-w-0 px-4 py-3 rounded-lg outline-none text-lg"
+                  style={{
+                    background: "oklch(0.10 0.018 255 / 0.85)",
+                    border: "1px solid oklch(1 0 0 / 0.08)",
+                    color: "var(--bone)",
+                  }} />
+                <button onClick={submit} disabled={!name.trim()}
+                  className="btn-primary lift shrink-0 px-6 py-3 rounded-lg font-bold tracking-tight text-lg disabled:opacity-30 disabled:cursor-not-allowed">
+                  Begin →
+                </button>
+              </div>
+              <div className="caption mt-4">
+                Five rounds per nation. Eight nations. ~10% of all moves misfire — even hawks. Reputations form after three observed moves.
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function PayoffCell({ tone, title, copy, me, them }) {
+      const map = {
+        gold:    { color: "var(--gold)",  bg: "oklch(0.30 0.06 85 / 0.40)",  border: "oklch(0.78 0.14 85 / 0.30)" },
+        ember:   { color: "var(--ember)", bg: "oklch(0.30 0.16 28 / 0.35)",  border: "oklch(0.64 0.22 28 / 0.35)" },
+        "ember-soft": { color: "oklch(0.65 0.15 28)", bg: "oklch(0.20 0.10 28 / 0.30)", border: "oklch(0.60 0.18 28 / 0.20)" },
+        dark:    { color: "var(--bone-dim)", bg: "oklch(0.14 0.02 255 / 0.55)", border: "oklch(1 0 0 / 0.06)" },
+      };
+      const t = map[tone];
+      return (
+        <div className="p-4 rounded-lg flex items-center justify-between" style={{ background: t.bg, border: `1px solid ${t.border}` }}>
+          <div>
+            <div className="text-sm font-bold" style={{ color: t.color }}>{title}</div>
+            <div className="caption">{copy}</div>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="mono text-xl font-bold" style={{ color: t.color }}>{me}</span>
+            <span className="mono text-sm" style={{color: "var(--bone-low)"}}>/</span>
+            <span className="mono text-sm" style={{color: "var(--bone-low)"}}>{them}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // LEADERBOARD
+    // ============================================================
+    function LeaderboardPanel({ state }) {
+      const max = Math.max(1, ...state.leaderboard.map(e => e.score));
+      return (
+        <aside className="panel p-5 lg:sticky lg:top-4 self-start">
+          <div className="flex items-baseline justify-between mb-4">
+            <div className="label">Standings</div>
+            <div className="flex items-center gap-1.5">
+              <span className="rep-dot ember" style={{color: "var(--leaf)"}}></span>
+              <span className="caption mono">live · t{state.turn}</span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            {state.leaderboard.map((entry, i) => {
+              const rep = entry.isPlayer ? null : state.reputations?.[entry.id];
+              const repColor = rep ? REP_STYLES[rep.bucket].color : null;
+              const pct = (entry.score / max) * 100;
+              return (
+                <div key={entry.id}
+                  className="flex items-center gap-3 px-2 py-1.5 rounded-md"
+                  style={{
+                    background: entry.isPlayer ? "oklch(0.30 0.06 85 / 0.30)" : "transparent",
+                    border: entry.isPlayer ? "1px solid oklch(0.78 0.14 85 / 0.40)" : "1px solid transparent",
+                  }}>
+                  <span className="mono text-xs w-5 text-right" style={{color: "var(--bone-low)"}}>{String(i + 1).padStart(2, "0")}</span>
+                  <NationToken code={entry.code} color={entry.color} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold truncate flex items-center gap-2">
+                      {entry.isPlayer ? entry.label : entry.name}
+                      {repColor && <span className="rep-dot" style={{ color: repColor, width: 5, height: 5 }}></span>}
+                    </div>
+                    <div className="score-bar mt-1">
+                      <div style={{
+                        width: `${pct}%`, height: "100%",
+                        background: entry.isPlayer
+                          ? "linear-gradient(90deg, var(--gold), var(--gold-deep))"
+                          : `linear-gradient(90deg, ${entry.color}, color-mix(in oklch, ${entry.color} 30%, black))`,
+                        transition: "width .4s cubic-bezier(0.2, 0.8, 0.1, 1)",
+                      }}></div>
+                    </div>
+                  </div>
+                  <span className="mono text-base font-bold num">{entry.score}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 pt-4 border-t flex items-center gap-3 flex-wrap" style={{borderColor: "oklch(1 0 0 / 0.06)"}}>
+            {Object.entries(REP_STYLES).map(([k, v]) => (
+              <span key={k} className="flex items-center gap-1.5 caption">
+                <span className="rep-dot" style={{ color: v.color, width: 5, height: 5 }}></span>
+                {v.label}
+              </span>
+            ))}
+          </div>
+        </aside>
+      );
+    }
+
+    // ============================================================
+    // GAME SCREEN — turn UI
+    // ============================================================
+    function GameScreen({ state, dispatch }) {
+      const matchup = state.allMatchups[state.currentMatchupIdx];
+      const playerIsP1 = matchup.p1 === "player";
+      const botId = playerIsP1 ? matchup.p2 : matchup.p1;
+      const bot = botEntry(state, botId);
+      const rep = state.reputations?.[botId];
+      const repColor = REP_STYLES[rep?.bucket || "unknown"].color;
+      const myScore = matchup.rounds.reduce((s, r) => s + (playerIsP1 ? r.p1score : r.p2score), 0);
+      const oppScore = matchup.rounds.reduce((s, r) => s + (playerIsP1 ? r.p2score : r.p1score), 0);
+      const upcoming = Math.min(matchup.rounds.length + 1, ROUNDS_PER_MATCHUP);
+      const totalAgents = state.playerMatchupIndices.length;
+      const finishedAgents = state.playerMatchupIndices.filter(i => state.allMatchups[i].complete).length;
+      const totalRoundsPlayed = state.playerMatchupIndices.reduce((s, i) => s + state.allMatchups[i].rounds.length, 0);
+      const totalRounds = totalAgents * ROUNDS_PER_MATCHUP;
+
+      return (
+        <div className="min-h-screen p-4 sm:p-6 fade-in">
+          <div className="max-w-7xl mx-auto">
+            {/* Top bar */}
+            <header className="flex items-center justify-between mb-5 px-1 gap-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="serif text-2xl sm:text-3xl" style={{color: "var(--ember)"}}>◆</span>
+                <div className="min-w-0">
+                  <div className="serif text-lg sm:text-xl leading-none truncate">Nuclear Standoff</div>
+                  <div className="caption mono truncate">t{state.turn + 1} · {finishedAgents}/{totalAgents} cleared</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <NationToken code={state.player.countryCode} color={state.player.countryColor} size="sm" />
+                <span className="text-sm font-semibold hidden sm:inline">{state.player.name}</span>
+                <span className="caption hidden sm:inline">·</span>
+                <span className="caption truncate max-w-[10ch] sm:max-w-none">{state.player.country}</span>
+              </div>
+            </header>
+
+            {/* Tournament progress strip */}
+            <div className="mb-5 px-1">
+              <div className="flex gap-1">
+                {Array.from({ length: totalRounds }).map((_, i) => (
+                  <div key={i} className="flex-1 h-1.5 rounded-full" style={{
+                    background: i < totalRoundsPlayed
+                      ? "linear-gradient(90deg, var(--gold), var(--gold-deep))"
+                      : "oklch(0.20 0.018 255)"
+                  }}></div>
+                ))}
+              </div>
+              <div className="flex justify-between mt-1.5">
+                <span className="caption mono">{totalRoundsPlayed}/{totalRounds} rounds played</span>
+                <span className="caption mono">round {upcoming} of {ROUNDS_PER_MATCHUP} this nation</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <main className="lg:col-span-2 space-y-5">
+                {/* Opponent dossier */}
+                <div className="panel p-5 sm:p-7 panel-mobile-tight relative overflow-hidden">
+                  {/* Subtle accent stripe */}
+                  <div className="absolute top-0 left-0 right-0 h-px" style={{
+                    background: `linear-gradient(90deg, transparent, ${repColor}, transparent)`,
+                    opacity: 0.6
+                  }}></div>
+
+                  <div className="flex items-start justify-between gap-4 mb-6">
+                    <div className="min-w-0">
+                      <div className="label mb-3" style={{color: repColor}}>OPPONENT DOSSIER</div>
+                      <div className="flex items-center gap-4 mb-3">
+                        <NationToken code={bot.countryCode} color={bot.countryColor} size="lg" />
+                        <div className="min-w-0">
+                          <h2 className="serif serif-xl text-4xl sm:text-5xl leading-none mb-2">{bot.codename}</h2>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <ReputationPill reputation={rep} size="lg" />
+                            <span className="caption italic">doctrine sealed</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="label">Round</div>
+                      <div className="serif text-4xl sm:text-6xl leading-none">{upcoming}<span className="text-2xl sm:text-3xl" style={{color:"var(--bone-low)"}}>/{ROUNDS_PER_MATCHUP}</span></div>
+                    </div>
+                  </div>
+
+                  {/* Live matchup score */}
+                  <ScoreDuel
+                    me={{ code: state.player.countryCode, color: state.player.countryColor, name: state.player.country, score: myScore, isMe: true }}
+                    them={{ code: bot.countryCode, color: bot.countryColor, name: bot.codename, score: oppScore, isMe: false }}
+                  />
+
+                  {/* History */}
+                  <PrivateHistory rounds={matchup.rounds} playerIsP1={playerIsP1} totalRounds={ROUNDS_PER_MATCHUP} />
+                </div>
+
+                {/* Move buttons */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <button onClick={() => dispatch({ type: "PLAYER_MOVE", move: "cooperate" })}
+                    className="btn-trade lift rounded-2xl p-4 sm:p-7 text-left relative overflow-hidden group">
+                    <div className="label mb-2" style={{color: "var(--gold)"}}>OFFER</div>
+                    <div className="serif serif-lg text-4xl sm:text-5xl mb-1" style={{color: "var(--gold)"}}>Trade</div>
+                    <div className="caption">Mutual prosperity if matched. Vulnerable if not.</div>
+                    <svg viewBox="0 0 100 60" className="absolute right-3 top-3 sm:right-4 sm:top-4 w-12 h-8 sm:w-16 sm:h-10 opacity-50 group-hover:opacity-100 transition-opacity">
+                      <path d="M5,30 Q50,5 95,30 Q50,55 5,30 Z" fill="none" stroke="var(--gold)" strokeWidth="1.5"/>
+                      <circle cx="50" cy="30" r="3" fill="var(--gold)"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => dispatch({ type: "PLAYER_MOVE", move: "attack" })}
+                    className="btn-strike lift rounded-2xl p-4 sm:p-7 text-left relative overflow-hidden group">
+                    <div className="label mb-2" style={{color: "var(--ember)"}}>LAUNCH</div>
+                    <div className="serif serif-lg text-4xl sm:text-5xl mb-1" style={{color: "var(--ember-bright)"}}>Strike</div>
+                    <div className="caption">Surprise attack. Big payoff if they trusted.</div>
+                    <svg viewBox="0 0 100 60" className="absolute right-3 top-3 sm:right-4 sm:top-4 w-12 h-8 sm:w-16 sm:h-10 opacity-50 group-hover:opacity-100 transition-opacity">
+                      <path d="M10,50 L40,15 L50,30 L60,15 L90,50" fill="none" stroke="var(--ember-bright)" strokeWidth="1.5" strokeLinejoin="round"/>
+                      <path d="M40,15 L50,30 L60,15 L50,5 Z" fill="var(--ember-bright)" opacity="0.7"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="caption text-center italic">
+                  ~10% of orders misfire. Even loyal hawks misfire. Plan accordingly.
+                </div>
+              </main>
+
+              <LeaderboardPanel state={state} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ScoreDuel({ me, them }) {
+      const total = Math.max(1, me.score + them.score);
+      const myPct = (me.score / total) * 100;
+      const themPct = 100 - myPct;
+      return (
+        <div className="mb-6 panel-flat p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <NationToken code={me.code} color={me.color} size="sm" />
+            <span className="text-sm font-semibold">{me.name}</span>
+            <span className="mono num text-lg ml-auto" style={{color: "var(--gold)"}}>{me.score}</span>
+            <span className="caption mx-1">vs</span>
+            <span className="mono num text-lg" style={{color: "var(--ember)"}}>{them.score}</span>
+            <span className="text-sm font-semibold">{them.name}</span>
+            <NationToken code={them.code} color={them.color} size="sm" />
+          </div>
+          <div className="flex h-2 rounded-full overflow-hidden" style={{background: "oklch(0.15 0.018 255)"}}>
+            <div className="score-fill-me" style={{ width: `${myPct}%`, transition: "width .3s ease" }}></div>
+            <div className="score-fill-them" style={{ width: `${themPct}%`, transition: "width .3s ease" }}></div>
+          </div>
+        </div>
+      );
+    }
+
+    function PrivateHistory({ rounds, playerIsP1, totalRounds }) {
+      const slots = Array.from({ length: totalRounds });
+      return (
+        <div>
+          <div className="label mb-3">Bilateral history</div>
+          <div className="grid grid-cols-5 gap-2">
+            {slots.map((_, i) => {
+              const r = rounds[i];
+              if (!r) {
+                return (
+                  <div key={i} className="panel-flat p-3 opacity-50">
+                    <div className="caption mono mb-2">R{i + 1}</div>
+                    <div className="flex gap-1 mb-2">
+                      <div className="move-chip empty"></div>
+                      <div className="move-chip empty"></div>
+                    </div>
+                    <div className="caption mono">·/·</div>
+                  </div>
+                );
+              }
+              const myMove  = playerIsP1 ? r.p1move  : r.p2move;
+              const oppMove = playerIsP1 ? r.p2move  : r.p1move;
+              const myS     = playerIsP1 ? r.p1score : r.p2score;
+              const oppS    = playerIsP1 ? r.p2score : r.p1score;
+              const cls = m => m === "cooperate" ? "coop" : "atk";
+              return (
+                <div key={i} className="panel-flat p-3">
+                  <div className="caption mono mb-2">R{i + 1}</div>
+                  <div className="flex gap-1 mb-2">
+                    <div className={`move-chip ${cls(myMove)}`} title={`You: ${myMove}`}></div>
+                    <div className={`move-chip ${cls(oppMove)}`} title={`Them: ${oppMove}`}></div>
+                  </div>
+                  <div className="caption mono num">{myS}/{oppS}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // ROUND RESULT — the dramatic outcome screen
+    // ============================================================
+    function RoundResultScreen({ state, dispatch }) {
+      const { lastRound } = state;
+      const bot = botEntry(state, lastRound.botId);
+      const rep = state.reputations?.[lastRound.botId];
+      const p = lastRound.playerMove, b = lastRound.botMove;
+
+      // Outcome dispatch
+      let kind;
+      if (p === "cooperate" && b === "cooperate") kind = "trade";
+      else if (p === "attack" && b === "cooperate") kind = "you_struck";
+      else if (p === "cooperate" && b === "attack") kind = "you_betrayed";
+      else kind = "mutual";
+
+      // Flash overlay key — re-mounts on each render so animation runs
+      const [flashKey] = useState(() => Math.random());
+
+      return (
+        <div className="min-h-screen p-4 sm:p-6 fade-in">
+          {/* Flash overlay */}
+          <div key={flashKey} className={
+            kind === "trade" ? "trade-bloom" :
+            kind === "mutual" ? "nuke-flash" : "strike-flash"
+          }></div>
+
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <main className={`lg:col-span-2 ${kind !== "trade" ? "shake" : ""}`}>
+                {kind === "trade"        && <SceneTrade        bot={bot} rep={rep} player={state.player} round={lastRound} dispatch={dispatch} />}
+                {kind === "you_struck"   && <SceneYouStruck    bot={bot} rep={rep} player={state.player} round={lastRound} dispatch={dispatch} />}
+                {kind === "you_betrayed" && <SceneYouBetrayed  bot={bot} rep={rep} player={state.player} round={lastRound} dispatch={dispatch} />}
+                {kind === "mutual"       && <SceneMutual       bot={bot} rep={rep} player={state.player} round={lastRound} dispatch={dispatch} />}
+              </main>
+              <LeaderboardPanel state={state} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ResultFooter({ player, bot, round, dispatch }) {
+      return (
+        <>
+          <div className="grid grid-cols-2 gap-3 mt-6">
+            <ScoreCard side="me"   player={player} round={round} />
+            <ScoreCard side="them" bot={bot}      round={round} />
+          </div>
+          <button onClick={() => dispatch({ type: "CONTINUE_ROUND" })}
+            autoFocus
+            className="btn-primary lift w-full mt-5 py-4 rounded-xl text-lg font-bold">
+            {round.matchupComplete ? "Conclude this nation →" : "Press on →"}
+          </button>
+        </>
+      );
+    }
+
+    function ScoreCard({ side, player, bot, round }) {
+      const meSide = side === "me";
+      const move = meSide ? round.playerMove : round.botMove;
+      const moveScore = meSide ? round.playerScore : round.botScore;
+      const subject = meSide ? player : bot;
+      const code = subject.countryCode;
+      const color = subject.countryColor;
+      const name = meSide ? subject.country : subject.codename;
+      const accent = move === "cooperate" ? "var(--gold)" : "var(--ember)";
+      return (
+        <div className="panel-flat p-4 relative overflow-hidden">
+          <div className="absolute top-0 bottom-0 left-0 w-0.5" style={{background: accent, opacity: 0.6}}></div>
+          <div className="flex items-center gap-2 mb-2">
+            <NationToken code={code} color={color} size="sm" />
+            <span className="text-sm font-semibold truncate">{name}</span>
+          </div>
+          <div className="flex items-end justify-between">
+            <ChoiceTag move={move} />
+            <div className="serif text-5xl leading-none num" style={{ color: accent }}>+{moveScore}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function SceneHeader({ bot, rep, round, accentColor, etiquette }) {
+      return (
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="micro" style={{color: accentColor}}>{etiquette}</span>
+            <span className="h-px flex-1" style={{background: `linear-gradient(90deg, ${accentColor}, transparent)`, opacity: 0.4}}></span>
+            <span className="caption mono">round {round.roundNum}/{ROUNDS_PER_MATCHUP}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <NationToken code={bot.countryCode} color={bot.countryColor} size="lg" />
+            <div>
+              <div className="serif text-3xl leading-none">{bot.codename}</div>
+              <div className="mt-1.5"><ReputationPill reputation={rep} /></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // === Scene: TRADE — golden, prosperous ===
+    function SceneTrade({ bot, rep, player, round, dispatch }) {
+      return (
+        <div className="scene-coop panel p-5 sm:p-7 panel-mobile-tight relative overflow-hidden">
+          <SceneHeader bot={bot} rep={rep} round={round} accentColor="var(--gold)" etiquette="◇ MUTUAL ACCORD" />
+
+          <div className="relative h-56 mb-2 rounded-xl overflow-hidden" style={{
+            background: "radial-gradient(ellipse at 50% 100%, oklch(0.30 0.06 75 / 0.7), oklch(0.13 0.03 80 / 0.5))",
+            border: "1px solid oklch(0.78 0.14 85 / 0.20)"
+          }}>
+            {/* Trade route */}
+            <svg viewBox="0 0 600 200" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="route" x1="0" x2="1">
+                  <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.2"/>
+                  <stop offset="50%" stopColor="var(--gold)" stopOpacity="1"/>
+                  <stop offset="100%" stopColor="var(--gold)" stopOpacity="0.2"/>
+                </linearGradient>
+                <radialGradient id="cityGlow">
+                  <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.8"/>
+                  <stop offset="100%" stopColor="var(--gold)" stopOpacity="0"/>
+                </radialGradient>
+              </defs>
+              {/* horizon line */}
+              <line x1="0" y1="160" x2="600" y2="160" stroke="oklch(0.50 0.10 80 / 0.3)" strokeWidth="1"/>
+              {/* trade route arc */}
+              <path d="M 80,160 Q 300,40 520,160" fill="none" stroke="url(#route)" strokeWidth="3" className="draw-line" />
+              {/* dotted moving particles */}
+              {[0,1,2,3,4].map(i => (
+                <circle key={i} r="3" fill="var(--gold)">
+                  <animateMotion dur="3s" repeatCount="indefinite" begin={`${i * 0.6}s`}
+                    path="M 80,160 Q 300,40 520,160"/>
+                </circle>
+              ))}
+              {/* city silhouettes */}
+              <CityGlyph x={80} color="var(--gold)" />
+              <CityGlyph x={520} color="var(--gold)" />
+              {/* abstract grain silos / sun */}
+              <circle cx="300" cy="60" r="22" fill="var(--gold)" opacity="0.20" className="ember"/>
+              <circle cx="300" cy="60" r="10" fill="var(--gold)" opacity="0.55" className="ember"/>
+              {/* prosperity bars rising */}
+              {[1,2,3,4,5,6,7,8].map(i => {
+                const x = 30 + i * 70;
+                const h = 12 + (i % 3) * 8;
+                return <rect key={i} x={x-4} y={170 - h} width="3" height={h} fill="var(--gold-deep)" opacity="0.7" className="grow-bar" style={{animationDelay: `${0.2 + i*0.05}s`}} />;
+              })}
+            </svg>
+            {/* floating tickers */}
+            <div className="ticker" style={{ left: "20%", bottom: "30%", color: "var(--gold)" }}>+GDP</div>
+            <div className="ticker" style={{ left: "55%", bottom: "20%", color: "var(--gold)", animationDelay: "0.3s" }}>+TRUST</div>
+            <div className="ticker" style={{ left: "75%", bottom: "40%", color: "var(--gold)", animationDelay: "0.6s" }}>+GRAIN</div>
+          </div>
+
+          <div className="text-center mt-2">
+            <div className="serif text-4xl mb-1" style={{color: "var(--gold)"}}>The grain ships sail.</div>
+            <div className="caption italic max-w-md mx-auto">
+              {player.country} and {bot.codename} both prosper. Trust deepens — and so does the temptation to break it.
+            </div>
+          </div>
+
+          <ResultFooter player={player} bot={bot} round={round} dispatch={dispatch} />
+        </div>
+      );
+    }
+
+    function CityGlyph({ x, color }) {
+      return (
+        <g transform={`translate(${x - 24}, 130)`}>
+          <rect x="0"  y="14" width="6" height="16" fill={color} opacity="0.5"/>
+          <rect x="8"  y="6"  width="6" height="24" fill={color} opacity="0.65"/>
+          <rect x="16" y="10" width="6" height="20" fill={color} opacity="0.55"/>
+          <rect x="24" y="2"  width="6" height="28" fill={color} opacity="0.75"/>
+          <rect x="32" y="12" width="6" height="18" fill={color} opacity="0.5"/>
+          <rect x="40" y="8"  width="6" height="22" fill={color} opacity="0.6"/>
+          <circle cx="24" cy="-8" r="20" fill="url(#cityGlow)" opacity="0.7"/>
+        </g>
+      );
+    }
+
+    // === Scene: YOU STRUCK — they trusted, you attacked ===
+    function SceneYouStruck({ bot, rep, player, round, dispatch }) {
+      return (
+        <div className="scene-strike panel p-5 sm:p-7 panel-mobile-tight relative overflow-hidden">
+          <SceneHeader bot={bot} rep={rep} round={round} accentColor="var(--ember)" etiquette="◆ FIRST STRIKE" />
+
+          <div className="relative h-56 mb-2 rounded-xl overflow-hidden" style={{
+            background: "radial-gradient(ellipse at 50% 100%, oklch(0.20 0.10 25 / 0.85), oklch(0.06 0.02 30 / 1))",
+            border: "1px solid oklch(0.64 0.22 28 / 0.30)"
+          }}>
+            <svg viewBox="0 0 600 200" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+              <defs>
+                <radialGradient id="impact">
+                  <stop offset="0%" stopColor="oklch(1 0.10 35)" stopOpacity="1"/>
+                  <stop offset="40%" stopColor="var(--ember-bright)" stopOpacity="0.7"/>
+                  <stop offset="100%" stopColor="var(--ember)" stopOpacity="0"/>
+                </radialGradient>
+              </defs>
+              {/* Skyline silhouette of victim */}
+              <g transform="translate(280, 140)" opacity="0.85">
+                <rect x="0"   y="30" width="20" height="20" fill="oklch(0.06 0.02 25)"/>
+                <rect x="22"  y="5"  width="14" height="45" fill="oklch(0.06 0.02 25)"/>
+                <polygon points="36,10 50,-10 50,50 36,50" fill="oklch(0.06 0.02 25)"/>
+                <rect x="52"  y="25" width="22" height="25" fill="oklch(0.06 0.02 25)"/>
+                <rect x="76"  y="-5" width="12" height="55" fill="oklch(0.06 0.02 25)"/>
+                <rect x="90"  y="20" width="20" height="30" fill="oklch(0.06 0.02 25)"/>
+                <rect x="112" y="0"  width="10" height="50" fill="oklch(0.06 0.02 25)"/>
+              </g>
+              {/* incoming missile trail */}
+              <line x1="50" y1="20" x2="320" y2="135" stroke="var(--ember-bright)" strokeWidth="2" strokeDasharray="4 6" opacity="0.85"/>
+              <circle cx="320" cy="135" r="50" fill="url(#impact)" className="impact"/>
+              <circle cx="320" cy="135" r="14" fill="oklch(1 0.10 40)" className="impact"/>
+              {/* fracture cracks */}
+              <g stroke="var(--ember-bright)" strokeWidth="1.6" fill="none" opacity="0.7" className="fracture">
+                <path className="crack" d="M320,135 L420,180 L460,170"/>
+                <path className="crack" d="M320,135 L240,190 L180,170" style={{animationDelay: "0.05s"}}/>
+                <path className="crack" d="M320,135 L500,90 L550,40" style={{animationDelay: "0.1s"}}/>
+                <path className="crack" d="M320,135 L120,90 L40,60" style={{animationDelay: "0.15s"}}/>
+              </g>
+              {/* smoke plumes */}
+              {[0,1,2].map(i => (
+                <g key={i} className="smoke" style={{animationDelay: `${i * 0.4}s`, transformOrigin: `${300 + i*30}px 130px`}}>
+                  <circle cx={300 + i*30} cy="130" r="14" fill="oklch(0.20 0.03 30 / 0.6)"/>
+                  <circle cx={310 + i*30} cy="115" r="10" fill="oklch(0.30 0.04 30 / 0.5)"/>
+                </g>
+              ))}
+            </svg>
+            <div className="ticker" style={{ left: "55%", top: "30%", color: "var(--ember-bright)" }}>−CAPITAL</div>
+            <div className="ticker" style={{ left: "60%", top: "55%", color: "var(--ember-bright)", animationDelay: "0.4s" }}>−TRUST</div>
+          </div>
+
+          <div className="text-center mt-2">
+            <div className="serif text-4xl mb-1" style={{color: "var(--ember-bright)"}}>{bot.codename} is in flames.</div>
+            <div className="caption italic max-w-md mx-auto">
+              {player.country} struck while they extended a hand. Pure profit — at the cost of your reputation.
+            </div>
+          </div>
+
+          <ResultFooter player={player} bot={bot} round={round} dispatch={dispatch} />
+        </div>
+      );
+    }
+
+    // === Scene: YOU BETRAYED — they hit, you trusted ===
+    function SceneYouBetrayed({ bot, rep, player, round, dispatch }) {
+      return (
+        <div className="scene-betrayed panel p-5 sm:p-7 panel-mobile-tight relative overflow-hidden">
+          <SceneHeader bot={bot} rep={rep} round={round} accentColor="var(--ember)" etiquette="◆ BETRAYED" />
+
+          <div className="relative h-56 mb-2 rounded-xl overflow-hidden" style={{
+            background: "radial-gradient(ellipse at 50% 100%, oklch(0.18 0.10 25 / 0.85), oklch(0.06 0.02 30 / 1))",
+            border: "1px solid oklch(0.64 0.22 28 / 0.30)"
+          }}>
+            <svg viewBox="0 0 600 200" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+              <defs>
+                <radialGradient id="impactB">
+                  <stop offset="0%" stopColor="oklch(1 0.10 35)" stopOpacity="1"/>
+                  <stop offset="40%" stopColor="var(--ember-bright)" stopOpacity="0.7"/>
+                  <stop offset="100%" stopColor="var(--ember)" stopOpacity="0"/>
+                </radialGradient>
+              </defs>
+              {/* Hand reaching out — broken */}
+              <g transform="translate(140, 60)" opacity="0.4">
+                <path d="M 0,80 Q 40,60 80,70 L 90,55 L 100,68 L 110,52 L 120,68 L 130,55 L 140,80 Z" fill="none" stroke="var(--bone-dim)" strokeWidth="1.2"/>
+              </g>
+              {/* Your skyline being hit */}
+              <g transform="translate(280, 140)" opacity="0.9">
+                <rect x="0"   y="30" width="20" height="20" fill="oklch(0.06 0.02 25)"/>
+                <rect x="22"  y="5"  width="14" height="45" fill="oklch(0.06 0.02 25)"/>
+                <polygon points="36,10 50,-10 50,50 36,50" fill="oklch(0.06 0.02 25)"/>
+                <rect x="52"  y="25" width="22" height="25" fill="oklch(0.06 0.02 25)"/>
+                <rect x="76"  y="-5" width="12" height="55" fill="oklch(0.06 0.02 25)"/>
+                <rect x="90"  y="20" width="20" height="30" fill="oklch(0.06 0.02 25)"/>
+                <rect x="112" y="0"  width="10" height="50" fill="oklch(0.06 0.02 25)"/>
+              </g>
+              <line x1="550" y1="25" x2="320" y2="135" stroke="var(--ember-bright)" strokeWidth="2" strokeDasharray="4 6" opacity="0.85"/>
+              <circle cx="320" cy="135" r="48" fill="url(#impactB)" className="impact"/>
+              <circle cx="320" cy="135" r="12" fill="oklch(1 0.10 40)" className="impact"/>
+              <g stroke="var(--ember-bright)" strokeWidth="1.6" fill="none" opacity="0.7" className="fracture">
+                <path className="crack" d="M320,135 L420,180 L460,170"/>
+                <path className="crack" d="M320,135 L240,190 L180,170" style={{animationDelay:"0.05s"}}/>
+                <path className="crack" d="M320,135 L500,90 L550,40" style={{animationDelay:"0.1s"}}/>
+                <path className="crack" d="M320,135 L120,90 L40,60" style={{animationDelay:"0.15s"}}/>
+              </g>
+              {[0,1,2].map(i => (
+                <g key={i} className="smoke" style={{animationDelay: `${i * 0.4}s`, transformOrigin: `${300 + i*30}px 130px`}}>
+                  <circle cx={300 + i*30} cy="130" r="14" fill="oklch(0.20 0.03 30 / 0.6)"/>
+                  <circle cx={310 + i*30} cy="115" r="10" fill="oklch(0.30 0.04 30 / 0.5)"/>
+                </g>
+              ))}
+            </svg>
+            <div className="ticker" style={{ left: "55%", top: "30%", color: "var(--ember-bright)" }}>−CAPITAL</div>
+            <div className="ticker" style={{ left: "30%", top: "50%", color: "var(--ember-bright)", animationDelay: "0.4s" }}>BROKEN PACT</div>
+          </div>
+
+          <div className="text-center mt-2">
+            <div className="serif text-4xl mb-1" style={{color: "var(--ember-bright)"}}>You were struck.</div>
+            <div className="caption italic max-w-md mx-auto">
+              {bot.codename} answered an open hand with fire. {player.country} pays the price for trust.
+            </div>
+          </div>
+
+          <ResultFooter player={player} bot={bot} round={round} dispatch={dispatch} />
+        </div>
+      );
+    }
+
+    // === Scene: MUTUAL — both fired ===
+    function SceneMutual({ bot, rep, player, round, dispatch }) {
+      return (
+        <div className="scene-nuke panel p-5 sm:p-7 panel-mobile-tight relative overflow-hidden">
+          <SceneHeader bot={bot} rep={rep} round={round} accentColor="var(--ember)" etiquette="◆ MUTUAL ANNIHILATION" />
+
+          <div className="relative h-56 mb-2 rounded-xl overflow-hidden" style={{
+            background: "radial-gradient(ellipse at 50% 100%, oklch(0.30 0.18 30 / 0.85), oklch(0.06 0.02 30 / 1))",
+            border: "1px solid oklch(0.64 0.22 28 / 0.40)"
+          }}>
+            <svg viewBox="0 0 600 200" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+              <defs>
+                <radialGradient id="mush">
+                  <stop offset="0%" stopColor="oklch(1 0.10 60)" stopOpacity="1"/>
+                  <stop offset="35%" stopColor="oklch(0.75 0.20 35)" stopOpacity="0.85"/>
+                  <stop offset="100%" stopColor="oklch(0.30 0.10 25)" stopOpacity="0"/>
+                </radialGradient>
+              </defs>
+              {/* horizon */}
+              <line x1="0" y1="170" x2="600" y2="170" stroke="oklch(0.30 0.10 25 / 0.6)" strokeWidth="1"/>
+              {/* Mushroom cloud */}
+              <ellipse cx="300" cy="80" rx="120" ry="55" fill="url(#mush)" className="impact"/>
+              <ellipse cx="300" cy="120" rx="40" ry="50" fill="url(#mush)" className="impact" style={{animationDelay: "0.05s"}}/>
+              <ellipse cx="300" cy="160" rx="60" ry="20" fill="url(#mush)" className="impact" style={{animationDelay: "0.1s"}}/>
+              {/* core flash */}
+              <circle cx="300" cy="100" r="30" fill="oklch(1 0.05 90)" opacity="0.9" className="impact"/>
+              {/* fracture rays */}
+              <g stroke="oklch(0.85 0.18 40)" strokeWidth="1" fill="none" opacity="0.6">
+                {Array.from({length: 12}).map((_, i) => {
+                  const a = (i / 12) * Math.PI * 2;
+                  const x2 = 300 + Math.cos(a) * 280;
+                  const y2 = 100 + Math.sin(a) * 280;
+                  return <line key={i} x1="300" y1="100" x2={x2} y2={y2} className="crack" style={{animationDelay: `${i * 0.02}s`}}/>;
+                })}
+              </g>
+            </svg>
+          </div>
+
+          <div className="text-center mt-2">
+            <div className="serif text-4xl mb-1" style={{color: "oklch(0.85 0.18 40)"}}>Both nations launched.</div>
+            <div className="caption italic max-w-md mx-auto">
+              {player.country} and {bot.codename} now share only the fallout. Both walk away wounded.
+            </div>
+          </div>
+
+          <ResultFooter player={player} bot={bot} round={round} dispatch={dispatch} />
+        </div>
+      );
+    }
+
+    // ============================================================
+    // BETWEEN — matchup complete summary
+    // ============================================================
+    function BetweenScreen({ state, dispatch }) {
+      const matchup = state.allMatchups[state.currentMatchupIdx];
+      const playerIsP1 = matchup.p1 === "player";
+      const botId = playerIsP1 ? matchup.p2 : matchup.p1;
+      const bot = botEntry(state, botId);
+      const pScore = matchup.rounds.reduce((s, r) => s + (playerIsP1 ? r.p1score : r.p2score), 0);
+      const oScore = matchup.rounds.reduce((s, r) => s + (playerIsP1 ? r.p2score : r.p1score), 0);
+      const won = pScore > oScore, tied = pScore === oScore;
+      const totalAgents = state.playerMatchupIndices.length;
+      const finishedAgents = state.playerMatchupIndices.filter(i => state.allMatchups[i].complete).length;
+      const isLast = finishedAgents >= totalAgents;
+      const verdict = won ? "ASCENDANT" : tied ? "STALEMATE" : "DIMINISHED";
+      const verdictColor = won ? "var(--gold)" : tied ? "var(--steel)" : "var(--ember)";
+
+      return (
+        <div className="min-h-screen p-4 sm:p-6 fade-in">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <main className="lg:col-span-2">
+              <div className="panel p-5 sm:p-7 panel-mobile-tight">
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="micro" style={{color: verdictColor}}>◆ NATION CONCLUDED · {verdict}</span>
+                  <span className="h-px flex-1" style={{background: `linear-gradient(90deg, ${verdictColor}, transparent)`, opacity: 0.4}}></span>
+                  <span className="caption mono">{finishedAgents}/{totalAgents}</span>
+                </div>
+
+                <div className="flex items-center gap-4 mb-7">
+                  <NationToken code={bot.countryCode} color={bot.countryColor} size="lg" />
+                  <div>
+                    <h2 className="serif serif-xl text-4xl sm:text-5xl leading-none">{bot.codename}</h2>
+                    <div className="mt-2"><ReputationPill reputation={state.reputations?.[botId]} /></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="panel-flat p-5 text-center">
+                    <div className="caption flex items-center justify-center gap-2 mb-2">
+                      <NationToken code={state.player.countryCode} color={state.player.countryColor} size="sm" />
+                      <span>{state.player.country}</span>
+                    </div>
+                    <div className="serif text-5xl sm:text-7xl leading-none num" style={{color: pScore >= oScore ? "var(--gold)" : "var(--bone-dim)"}}>{pScore}</div>
+                  </div>
+                  <div className="panel-flat p-5 text-center">
+                    <div className="caption flex items-center justify-center gap-2 mb-2">
+                      <NationToken code={bot.countryCode} color={bot.countryColor} size="sm" />
+                      <span>{bot.codename}</span>
+                    </div>
+                    <div className="serif text-5xl sm:text-7xl leading-none num" style={{color: oScore > pScore ? "var(--ember)" : "var(--bone-dim)"}}>{oScore}</div>
+                  </div>
+                </div>
+
+                {/* Round-by-round timeline */}
+                <div className="label mb-3">Round-by-round</div>
+                <div className="space-y-1.5 mb-6">
+                  {matchup.rounds.map((r, i) => {
+                    const myMove = playerIsP1 ? r.p1move : r.p2move;
+                    const oppMove = playerIsP1 ? r.p2move : r.p1move;
+                    const myS = playerIsP1 ? r.p1score : r.p2score;
+                    const oppS = playerIsP1 ? r.p2score : r.p1score;
+                    const winner = myS > oppS ? "me" : myS < oppS ? "them" : "tie";
+                    const accent = winner === "me" ? "var(--gold)" : winner === "them" ? "var(--ember)" : "var(--bone-low)";
+                    return (
+                      <div key={i} className="flex items-center gap-3 panel-flat px-4 py-2.5">
+                        <span className="caption mono w-7" style={{color: accent}}>R{i + 1}</span>
+                        <ChoiceTag move={myMove} />
+                        <span className="caption">vs</span>
+                        <ChoiceTag move={oppMove} />
+                        <span className="ml-auto mono num text-base"><span style={{color:"var(--gold)"}}>+{myS}</span> <span style={{color:"var(--bone-low)"}}>/</span> <span style={{color:"var(--ember)"}}>+{oppS}</span></span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button onClick={() => dispatch({ type: "NEXT_MATCHUP" })}
+                  className="btn-primary lift w-full py-4 rounded-xl font-bold text-lg">
+                  {isLast ? "Reveal final standings →" : "Summon next nation →"}
+                </button>
+              </div>
+            </main>
+            <LeaderboardPanel state={state} />
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // RESULTS
+    // ============================================================
+    function ResultsScreen({ state, dispatch }) {
+      const playerRank = state.leaderboard.findIndex(e => e.isPlayer) + 1;
+      const playerMatchups = state.playerMatchupIndices.map(idx => {
+        const m = state.allMatchups[idx];
+        const playerIsP1 = m.p1 === "player";
+        const botId = playerIsP1 ? m.p2 : m.p1;
+        const bot = botEntry(state, botId);
+        const pScore = m.rounds.reduce((s, r) => s + (playerIsP1 ? r.p1score : r.p2score), 0);
+        const oScore = m.rounds.reduce((s, r) => s + (playerIsP1 ? r.p2score : r.p1score), 0);
+        const playerMoves = m.rounds.map(r => playerIsP1 ? r.p1move : r.p2move);
+        return { bot, pScore, oScore, playerMoves };
+      });
+      const allPlayerMoves = playerMatchups.flatMap(pm => pm.playerMoves);
+      const coopRate = allPlayerMoves.length === 0 ? 0
+        : Math.round(allPlayerMoves.filter(x => x === "cooperate").length / allPlayerMoves.length * 100);
+      const wins = playerMatchups.filter(pm => pm.pScore > pm.oScore).length;
+      const losses = playerMatchups.filter(pm => pm.pScore < pm.oScore).length;
+      const ties = playerMatchups.filter(pm => pm.pScore === pm.oScore).length;
+      const revealById = Object.fromEntries(state.bots.map(b => [b.id, b]));
+      const medal = playerRank === 1 ? "First" : playerRank === 2 ? "Second" : playerRank === 3 ? "Third" : `Rank ${playerRank}`;
+
+      return (
+        <div className="min-h-screen p-4 sm:p-6 fade-in">
+          <div className="max-w-5xl mx-auto">
+            <div className="panel p-5 sm:p-8 panel-mobile-tight mb-5">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="micro" style={{color: "var(--gold)"}}>◆ DOSSIER DECLASSIFIED</span>
+                <span className="h-px flex-1" style={{background: "linear-gradient(90deg, oklch(0.78 0.14 85 / 0.5), transparent)"}}></span>
+              </div>
+              <h1 className="serif serif-hero text-5xl sm:text-7xl leading-[0.92] mb-3">The standoff <em style={{color:"var(--ember)"}}>ends</em>.</h1>
+              <p className="text-lg" style={{color:"var(--bone-dim)"}}>
+                {state.player.name} of {state.player.country} finishes <strong className="serif" style={{color: playerRank === 1 ? "var(--gold)" : "var(--bone)"}}>{medal}</strong> of {state.leaderboard.length}.
+                You cooperated <strong style={{color:"var(--gold)"}}>{coopRate}%</strong> of the time.
+              </p>
+              <div className="grid grid-cols-3 gap-3 mt-6">
+                <Stat label="Won"   value={wins}   color="var(--gold)" />
+                <Stat label="Tied"  value={ties}   color="var(--bone-dim)" />
+                <Stat label="Lost"  value={losses} color="var(--ember)" />
+              </div>
+            </div>
+
+            <div className="panel p-5 sm:p-7 panel-mobile-tight mb-5">
+              <div className="label mb-4">Final standings · doctrines revealed</div>
+              <div className="space-y-1.5">
+                {state.leaderboard.map((e, i) => {
+                  const reveal = e.isPlayer ? null : revealById[e.id];
+                  return (
+                    <div key={e.id} className="flex items-center gap-3 panel-flat px-4 py-3"
+                      style={e.isPlayer ? {borderColor:"oklch(0.78 0.14 85 / 0.4)", background: "oklch(0.30 0.06 85 / 0.20)"} : {}}>
+                      <span className="serif text-2xl w-9 text-right" style={{color: i < 3 ? "var(--gold)" : "var(--bone-low)"}}>#{i + 1}</span>
+                      <NationToken code={e.code} color={e.color} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold truncate">
+                          {e.label}
+                          {reveal && <span className="caption ml-2">— {reveal.realName}</span>}
+                        </div>
+                        {reveal && <div className="caption truncate mt-0.5">{reveal.desc}</div>}
+                      </div>
+                      <span className="serif text-3xl num">{e.score}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="panel p-5 sm:p-7 panel-mobile-tight mb-5">
+              <div className="label mb-4">Your matchups</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {playerMatchups.map((pm, i) => {
+                  const verdict = pm.pScore > pm.oScore ? "W" : pm.pScore < pm.oScore ? "L" : "T";
+                  const color = verdict === "W" ? "var(--gold)" : verdict === "L" ? "var(--ember)" : "var(--bone-low)";
+                  return (
+                    <div key={i} className="panel-flat p-3 flex items-center gap-3">
+                      <NationToken code={pm.bot.countryCode} color={pm.bot.countryColor} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold truncate">{pm.bot.codename}</div>
+                        <div className="caption truncate">{pm.bot.realName}</div>
+                      </div>
+                      <span className="mono num text-sm">{pm.pScore}–{pm.oScore}</span>
+                      <span className="serif text-2xl w-6 text-center" style={{color}}>{verdict}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button onClick={() => dispatch({ type: "RESET" })}
+              className="btn-primary lift w-full py-4 rounded-xl font-bold text-lg">
+              Begin a new standoff
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function Stat({ label, value, color }) {
+      return (
+        <div className="panel-flat p-4 text-center">
+          <div className="label mb-1">{label}</div>
+          <div className="serif text-4xl sm:text-5xl leading-none num" style={{color}}>{value}</div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // ROOT
+    // ============================================================
+    function App() {
+      const [state, dispatch] = useReducer(reducer, initialState);
+      useEffect(() => {
+        if (state.phase !== "menu" && state.phase !== "results") {
+          const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+          window.addEventListener("beforeunload", handler);
+          return () => window.removeEventListener("beforeunload", handler);
+        }
+      }, [state.phase]);
+
+      if (state.phase === "menu")         return <MenuScreen onStart={(name, countryCode) => dispatch({ type: "START", name, countryCode })} />;
+      if (state.phase === "playing")      return <GameScreen state={state} dispatch={dispatch} />;
+      if (state.phase === "round_result") return <RoundResultScreen state={state} dispatch={dispatch} />;
+      if (state.phase === "between")      return <BetweenScreen state={state} dispatch={dispatch} />;
+      if (state.phase === "results")      return <ResultsScreen state={state} dispatch={dispatch} />;
+      return null;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
